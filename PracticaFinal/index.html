@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta name="viewport" content="initial-scale=1, maximum-scale=1,user-scalable=no">
+  <title></title>
+
+  <link rel="stylesheet" href="https://js.arcgis.com/3.42/dijit/themes/claro/claro.css">
+  <link rel="stylesheet" href="https://js.arcgis.com/3.42/esri/css/esri.css">
+
+  <link rel="stylesheet" href="css/layout.css" />
+
+  <script>var dojoConfig = { parseOnLoad: true };</script>
+  <script src="https://js.arcgis.com/3.42/"></script>
+ 
+  <style>
+    #search {
+      display: block;
+      position: absolute;
+      z-index: 2;
+      top: 10px;
+      right: 10px;
+    }
+  </style>
+  <script>
+
+    var mapMain;
+    var tb;
+    require(["esri/map",
+      "dojo/on",
+      "esri/layers/ArcGISDynamicMapServiceLayer",
+      "esri/layers/FeatureLayer",
+      "esri/geometry/Extent",
+      "esri/tasks/query",
+      "esri/dijit/PopupTemplate",
+      "esri/dijit/Legend",
+      "esri/dijit/BasemapGallery",
+      "esri/dijit/Search",
+      "esri/dijit/Scalebar",
+      "esri/dijit/OverviewMap",
+      "esri/toolbars/draw",
+      "esri/graphic",
+      "esri/tasks/query",
+      "esri/symbols/SimpleFillSymbol",
+      "esri/symbols/SimpleLineSymbol",
+      "esri/symbols/SimpleMarkerSymbol",
+      "dojo/_base/Color",
+      "esri/graphicsUtils",
+      "dojo/_base/array",
+      "dojo/dom",
+      "esri/tasks/FindTask",
+      "esri/tasks/FindParameters",
+      "dijit/TitlePane",
+      "dijit/layout/TabContainer",
+      "dijit/layout/ContentPane",
+      "dijit/layout/BorderContainer",
+      "dojo/domReady!"],
+      function (
+        Map,
+        on, ArcGISDynamicMapServiceLayer,FeatureLayer,Extent,query,PopupTemplate,
+        Legend,BasemapGallery,Search,Scalebar,OverviewMap, Draw, Graphic, Query, SimpleFillSymbol, 
+        SimpleLineSymbol, SimpleMarkerSymbol,Color,graphicsUtils,arrayUtils, dom, FindTask, FindParameters
+      ) {
+
+        on(dojo.byId("pintaYQuery"), "click", fPintaYQuery);
+        on(dojo.byId("progButtonNode"), "click", fQueryEstados);
+      
+/* CONSULTA 1 */
+        function fPintaYQuery() {
+         // alert("Evento del botón Seleccionar ciudades");
+          var tbDraw = new Draw(mapMain);
+          tbDraw.on("draw-end", displayPolygon);
+          tbDraw.activate(Draw.POLYGON);
+        }
+         function displayPolygon(evt) {
+        // capturo la geometría del objeto evt
+        var geometryInput =   evt.geometry;
+
+        // definición del polígono de selección y su simbología amarillo
+        var tbDrawSymbol = new SimpleFillSymbol(SimpleFillSymbol.STYLE_SOLID, new SimpleLineSymbol(SimpleLineSymbol.STYLE_DASHDOT,  new Color([255, 255, 0]), 2), new Color([255, 255, 0, 0.2]));
+
+        // Antes de pintar el polígono limpio por si hubiera un polígono anterior dibujado
+        mapMain.graphics.clear();
+
+        
+       // Construyo y añado el polugon graphic
+        var graphicPolygon = new Graphic(geometryInput, tbDrawSymbol);
+        mapMain.graphics.add(graphicPolygon);
+
+       
+        // Llamo a la función de seleccionar ciudades
+        selectCities(geometryInput);        }
+
+        function selectCities(geometryInput) {
+
+       // Defino la simbología de las entidades seleccionadas en rojo
+        var symbolSelected = new SimpleMarkerSymbol({
+          "type": "esriSMS",
+          "style": "esriSMSCircle",
+          "color": [255, 115, 0, 128],
+          "size": 6,
+          "outline": {
+          "color": [255, 0, 0, 214],
+          "width": 1
+        }
+        });
+        //aplico la simbología solo a las seleccionadas a través de una query
+       lyrCities.setSelectionSymbol(symbolSelected);
+       var queryCities = new Query();
+       queryCities.geometry = geometryInput;
+
+      //Activo el evento selección completa
+        lyrCities.on("selection-complete");
+
+      // y realizo la selección
+        lyrCities.selectFeatures(queryCities, FeatureLayer.SELECTION_NEW);
+
+      }
+
+     
+
+/* CONSULTA 2*/
+      // Para encontrar los ESTADOS defino una tarea sobre la capa 2 campo "state_name"
+      var findTask = new FindTask("http://sampleserver6.arcgisonline.com/arcgis/rest/services/USA/MapServer");
+                
+      var findParams = new FindParameters();
+      findParams.layerIds = [2];
+      findParams.returnGeometry = true;
+      findParams.searchFields = ["state_name"];   
+      function fQueryEstados() {
+         // alert("Evento del botón Ir a estado");
+      
+        findParams.outSpatialReference = mapMain.spatialReference;
+        findParams.searchText = dom.byId("dtb").value;   // este es el valor del texto escrito            
+        findTask.execute(findParams, showResults); //ejecuto la funcion con la tarea por parámetro
+      }
+
+      function showResults(results){
+        //defino la simbología del estado seleccionado, selecciono el estado y hago el zoom
+        var polygonSymbol = new SimpleFillSymbol(SimpleFillSymbol.STYLE_SOLID, new SimpleLineSymbol(SimpleLineSymbol.STYLE_SOLID, new Color([255, 0, 0]), 2), new Color([255,255, 0, 0.5]));        
+        var items = arrayUtils.map(results, function (result) {     
+          var graphic = result.feature;
+          graphic.setSymbol(polygonSymbol);  
+          mapMain.graphics.clear();
+          mapMain.graphics.add(graphic); 
+          return result.feature;    
+        });
+        var myFeatureExtent = graphicsUtils.graphicsExtent(items);    
+        mapMain.setExtent(myFeatureExtent, true); 
+      }
+      
+      
+/* INICIO */      
+
+      // establezco el extent inicial en 4326
+      var extentInitial = new Extent({
+                "xmin": -173.247,
+                "ymin": -69.435,
+                "xmax": -16.269,
+                "ymax": 89.102,
+                "spatialReference": {
+                "wkid": 4326
+                }
+            });
+
+      mapMain = new Map("map", {
+          basemap: "topo",         
+          zoom: 4,
+          extent: extentInitial,                 
+          sliderStyle: "small"
+      });
+        
+      mapMain.on("load", function (evt) {
+      
+          mapMain.resize();
+          mapMain.reposition();
+
+      });
+        
+       
+
+    // URL variables servicio, estados y ciudades
+    var sUrlUSAService = "http://sampleserver6.arcgisonline.com/arcgis/rest/services/USA/MapServer";      
+    var sUrlUSAStates = "http://sampleserver6.arcgisonline.com/arcgis/rest/services/USA/MapServer/2";
+    var UrlUSACities = "http://sampleserver6.arcgisonline.com/arcgis/rest/services/USA/MapServer/0";
+    
+    // creo la capa de ciudades (0)
+    var lyrCities = new FeatureLayer(UrlUSACities);
+
+    // defino el popup de estados  
+    var ptPopup = new PopupTemplate({        
+				title: "Estado de:  {state_name}",   
+        fieldInfos: [ {
+					fieldName: "pop2000",
+          visible: true,
+          label: "Población:",
+					format: {
+						places: 0,
+						digitSeparator: true
+					}
+				}, {
+					fieldName: "pop00_sqmi",
+          visible: true,
+          label: "Población por sqmi: ",
+					format: {
+						places: 0,
+						digitSeparator: true
+					}
+				},{
+					fieldName: "ss6.gdb.States.area",
+          label: "Área en sqmi: ",
+          visible: true,
+					format: {
+						places: 2,
+						digitSeparator: true
+					}
+				}]           
+			});       
+      var outFieldsUSA = ["state_name", "ss6.gdb.States.area","pop2000", "pop00_sqmi" ];
+    
+
+      // creo la capa de estados (2) y asigno el popup definido y los campos de salida
+       var lyrUSAStates = new FeatureLayer(sUrlUSAStates, {
+
+        outFields: outFieldsUSA,
+        infoTemplate: ptPopup
+
+        });       
+       // creo el resto de capas (1 y 3) 
+        var lyrUSA = new ArcGISDynamicMapServiceLayer(sUrlUSAService, {
+                opacity: 0.5
+            });
+        lyrUSA.setVisibleLayers([1, 3]);
+
+        // añado todo al mapa
+        mapMain.addLayers([lyrUSAStates, lyrUSA,lyrCities]);
+
+       // Creo el mapa base      
+        var basemapGallery = new BasemapGallery({
+                    showArcGISBasemaps: true,
+                    map: mapMain
+                }, "basemapGallery");
+        basemapGallery.startup();   
+
+      // creo el widget de busqueda
+        var dijitsearch = new Search({
+                map: mapMain,
+                autoComplete:true
+              }, "divSearch");
+        dijitsearch.startup();
+      
+        // añado la leyenda 
+        mapMain.on("layers-add-result", function() {
+                var dijitLegend = new Legend({
+                  map: mapMain,
+                  arrangement: Legend.ALIGN_RIGHT
+                }, "legendDiv");
+                dijitLegend.startup();
+              });     
+
+        // añado la barra de escala centrada
+        var dijitScaleBar = new Scalebar({
+               map: mapMain,
+               scalebarUnit: "dual",
+               attachTo: "bottom-center"
+            });
+
+        // añado el overview map
+        var overviewMapDijit = new OverviewMap({
+            map: mapMain,
+            attachTo: "bottom-left",
+            color:"#D84E13",
+            opacity: .40,
+            visible: true
+            }, "overviewDiv");
+            overviewMapDijit.startup();
+      });
+
+
+      function initDrawTool() {
+                /*
+                 * Step: Implement the Draw toolbar
+                 */
+                var tbDraw = new Draw(mapMain);
+                tbDraw.on("draw-end", displayPolygon);
+                tbDraw.activate(Draw.POLYGON);
+
+            }
+
+                     
+  </script>
+
+</head>
+
+
+<body class="claro">
+  <div id="mainWindow" data-dojo-type="dijit.layout.BorderContainer" data-dojo-props="design:'headline', gutters:false"
+    style="width:100%; height:100%;">
+
+    <div id="header" data-dojo-type="dijit.layout.ContentPane" data-dojo-props="region:'top'">
+
+      Master GIS ESRI España
+      <div id="subheader">Goretti Calzadilla Medina</div>
+
+    </div>
+    <div data-dojo-type="dijit.layout.ContentPane" id="leftPane" data-dojo-props="region:'left'">
+      <div data-dojo-type="dijit.layout.TabContainer">
+
+        <div data-dojo-type="dijit.layout.ContentPane" data-dojo-props="title:'Leyenda', selected:true">
+          <div id="legendDiv"></div>
+        </div>
+
+        <div data-dojo-type="dijit.layout.ContentPane" data-dojo-props="title:'Tareas'">
+          Operaciones
+          <button id="pintaYQuery" type="button">Seleccionar ciudades</button>
+        </div>
+
+      </div>
+    </div>
+    
+    <!-- dentro del div del mapa creo todos los div necesarios: busqueda, galería y overview, ajusto tambien  posicionamiento de overview y search en el css-->
+    <div id="map" data-dojo-type="dijit.layout.ContentPane" data-dojo-props="region:'center'" >
+
+    <!-- Widgets de búsqueda, overview y galería de mapas base -->
+    <div style="position:absolute; left:15px; top:0px; z-Index:990; width: 90%;">
+      <div id="divSearch" ></div>    
+      <div style="position:relative; left:75px; top:60px; ">
+        <div data-dojo-type="dijit/TitlePane" data-dojo-props="title:'Galería mapas base', open:false">
+          <div data-dojo-type="dijit/layout/ContentPane" style="overflow:auto;">
+            <div id="basemapGallery"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="overviewDiv" ></div>  
+    </div>
+
+    <div id="footer" data-dojo-type="dijit.layout.ContentPane" data-dojo-props="region:'bottom'">
+
+      <label for="dtb">Introduzca el nombre de un estado:</label> <input id="dtb" data-dojo-type="dijit/form/TextBox"
+        value="Washington" />
+      <button id="progButtonNode" type="button">Ir al estado</button>
+    </div>
+
+  </div>
+</body>
+
+</html>
